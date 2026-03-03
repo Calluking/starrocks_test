@@ -88,10 +88,19 @@ def decode_bytes(value: bytes) -> str:
     return value.decode("utf-8", errors="replace")
 
 
+def ansi_escape_regex():
+    import re
+    return re.compile(r'\x1b(?:\[@[HJKfnsuhl]|[@-Z\\-_]|\[[0-9;?]*[a-zA-Z]|[[a-zA-Z]]))')
+
+
+def strip_ansi_codes(text):
+    return ansi_escape_regex().sub(''.text)
+
 def stringify_db_value(value) -> str:
     if isinstance(value, bytes):
-        return decode_bytes(value)
-    return str(value)
+        decode = decode_bytes(value)
+        return strip_ansi_codes(decoded)
+    return strip_ansi_codes(str(value))
 
 
 def run_single_query(cursor, sql: str) -> float:
