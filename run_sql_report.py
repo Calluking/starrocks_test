@@ -36,6 +36,7 @@ class QueryResult:
     mean_last_6_ms: float
     explain_rows: List[str]
     operator_times_ms: List[Tuple[str, float]]
+    category_times_ms: List[Tuple[str, float]]
 
 
 def make_random_vector_literal(dim: int = VECTOR_DIM) -> str:
@@ -195,6 +196,38 @@ def extract_operator_times(explain_lines: List[str]) -> List[Tuple[str, float]]:
     return sorted(merged.items(), key=lambda x: x[1], reverse=True)[:12]
 
 
+def classify_operator_category(text: str) -> str:
+    t = text.lower()
+    if "join" in t or "hash join" in t or "merge join" in t or "nested loop" in t:
+        return "Join"
+    if "scan" in t or "olapscan" in t or "tablet" in t:
+        return "Scan"
+    if "aggregate" in t or "agg" in t or "group by" in t:
+        return "Aggregate"
+    if "sort" in t or "topn" in t or "order by" in t:
+        return "Sort/TopN"
+    if "exchange" in t or "shuffle" in t or "distribute" in t:
+        return "Exchange/Shuffle"
+    if "filter" in t or "predicate" in t:
+        return "Filter"
+    if "project" in t:
+        return "Project"
+    if "window" in t or "analytic" in t:
+        return "Window"
+    return "Other"
+
+
+def extract_category_times(explain_lines: List[str]) -> List[Tuple[str, float]]:
+    totals = {}
+    for ln in explain_lines:
+        ms = parse_duration_to_ms(ln)
+        if ms is None:
+            continue
+        category = classify_operator_category(ln)
+        totals[category] = totals.get(category, 0.0) + ms
+    return sorted(totals.items(), key=lambda x: x[1], reverse=True)
+
+
 def ascii_bar_chart(items: List[Tuple[str, float]], width: int = 42) -> str:
     if not items:
         return "No parseable operator timing found in EXPLAIN ANALYZE output."
@@ -224,6 +257,7 @@ def benchmark_query(cursor, query_id: int, sql_template: str) -> QueryResult:
     cursor.execute(explain_sql)
     explain_lines = fetch_all_as_lines(cursor)
     operator_times = extract_operator_times(explain_lines)
+    category_times = extract_category_times(explain_lines)
 
     return QueryResult(
         query_id=query_id,
@@ -232,6 +266,7 @@ def benchmark_query(cursor, query_id: int, sql_template: str) -> QueryResult:
         mean_last_6_ms=mean_last_6,
         explain_rows=explain_lines,
         operator_times_ms=operator_times,
+        category_times_ms=category_times,
     )
 
 
@@ -289,6 +324,22 @@ def build_markdown(
         lines.append("```text")
         lines.append(ascii_bar_chart(r.operator_times_ms))
         lines.append("```")
+        lines.append("")
+
+        lines.append("### EXPLAIN ANALYZE Time by Category (Heuristic)")
+        lines.append("")
+        if r.category_times_ms:
+            total_category_ms = sum(v for _, v in r.category_times_ms) or 1.0
+            lines.append("| Category | Time (ms) | Share |")
+            lines.append("|---|---:|---:|")
+            for cat, ms in r.category_times_ms:
+                lines.append(f"| {cat} | {ms:.3f} | {ms / total_category_ms * 100:.1f}% |")
+            lines.append("")
+            lines.append("```text")
+            lines.append(ascii_bar_chart(r.category_times_ms))
+            lines.append("```")
+        else:
+            lines.append("No parseable category timing found.")
         lines.append("")
 
         lines.append("### EXPLAIN ANALYZE Raw Output")
