@@ -71,10 +71,26 @@ def fetch_all_as_lines(cursor) -> List[str]:
     out: List[str] = []
     for row in rows:
         if isinstance(row, (tuple, list)):
-            out.append("\t".join("" if v is None else str(v) for v in row))
+            out.append("\t".join("" if v is None else stringify_db_value(v) for v in row))
         else:
-            out.append(str(row))
+            out.append(stringify_db_value(row))
     return out
+
+
+def decode_bytes(value: bytes) -> str:
+    # Prefer UTF-8, then common Chinese encodings, then a lossy fallback.
+    for enc in ("utf-8", "gb18030", "gbk", "big5"):
+        try:
+            return value.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return value.decode("utf-8", errors="replace")
+
+
+def stringify_db_value(value) -> str:
+    if isinstance(value, bytes):
+        return decode_bytes(value)
+    return str(value)
 
 
 def run_single_query(cursor, sql: str) -> float:
