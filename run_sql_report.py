@@ -86,12 +86,10 @@ def run_single_query(cursor, sql: str) -> float:
 
 
 def parse_duration_to_ms(text: str) -> float | None:
-    m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*([^\s0-9]+)\b", text, flags=re.IGNORECASE)
-    if not m:
+    found = _find_first_duration_token(text)
+    if found is None:
         return None
-    value = float(m.group(1))
-    unit = m.group(2).strip().lower()
-    unit = unit.replace("μ", "u").replace("µ", "u")
+    _, _, value, unit = found
     if unit == "ns":
         return value / 1_000_000.0
     if unit == "us":
@@ -103,17 +101,68 @@ def parse_duration_to_ms(text: str) -> float | None:
     return None
 
 
+def _find_first_duration_token(text: str) -> Tuple[int, int, float, str] | None:
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if not (ch.isdigit() or ch == "."):
+            i += 1
+            continue
+
+        start_num = i
+        has_digit = ch.isdigit()
+        has_dot = ch == "."
+        i += 1
+        while i < n:
+            c = text[i]
+            if c.isdigit():
+                has_digit = True
+                i += 1
+                continue
+            if c == "." and not has_dot:
+                has_dot = True
+                i += 1
+                continue
+            break
+
+        if not has_digit:
+            continue
+
+        num_str = text[start_num:i]
+        try:
+            value = float(num_str)
+        except ValueError:
+            continue
+
+        while i < n and text[i].isspace():
+            i += 1
+
+        start_unit = i
+        while i < n and text[i].isalpha():
+            i += 1
+        unit = text[start_unit:i].lower().replace("?", "u").replace("?", "u")
+
+        if unit in ("ns", "us", "ms", "s"):
+            return start_num, i, value, unit
+
+    return None
+
+
 def extract_operator_times(explain_lines: List[str]) -> List[Tuple[str, float]]:
     items: List[Tuple[str, float]] = []
     for ln in explain_lines:
+        found = _find_first_duration_token(ln)
+        if found is None:
+            continue
+        start_idx, end_idx, _, _ = found
         ms = parse_duration_to_ms(ln)
         if ms is None:
             continue
 
         # Derive a readable operator label from line text.
-        op = ln.strip()
-        op = re.sub(r"\s+", " ", op)
-        op = re.sub(r"([0-9]+(?:\.[0-9]+)?\s*(?:ns|us|ms|s)\b).*$", r"\1", op, flags=re.IGNORECASE)
+        op = (ln[:start_idx] + ln[start_idx:end_idx]).strip()
+        op = " ".join(op.split())
 
         # Keep labels short for chart readability.
         if len(op) > 80:
