@@ -86,14 +86,15 @@ def run_single_query(cursor, sql: str) -> float:
 
 
 def parse_duration_to_ms(text: str) -> float | None:
-    m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(ns|us|?s|ms|s)\b", text, flags=re.IGNORECASE)
+    m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*([^\s0-9]+)\b", text, flags=re.IGNORECASE)
     if not m:
         return None
     value = float(m.group(1))
-    unit = m.group(2).lower()
+    unit = m.group(2).strip().lower()
+    unit = unit.replace("μ", "u").replace("µ", "u")
     if unit == "ns":
         return value / 1_000_000.0
-    if unit in ("us", "?s"):
+    if unit == "us":
         return value / 1_000.0
     if unit == "ms":
         return value
@@ -112,7 +113,7 @@ def extract_operator_times(explain_lines: List[str]) -> List[Tuple[str, float]]:
         # Derive a readable operator label from line text.
         op = ln.strip()
         op = re.sub(r"\s+", " ", op)
-        op = re.sub(r"([0-9]+(?:\.[0-9]+)?\s*(?:ns|us|?s|ms|s)\b).*$", r"\1", op, flags=re.IGNORECASE)
+        op = re.sub(r"([0-9]+(?:\.[0-9]+)?\s*(?:ns|us|ms|s)\b).*$", r"\1", op, flags=re.IGNORECASE)
 
         # Keep labels short for chart readability.
         if len(op) > 80:
