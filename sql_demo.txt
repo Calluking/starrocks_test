@@ -1,0 +1,5 @@
+1. Full Scan: SELECT COUNT(data_point_point_lla, approx_l2_distance(lms_generated_embedding, <random 512 dimension 0-1 vector>)) FROM test_GIS_1000000.dummy_data;
+2. SELECT data_point_point_lla, approx_l2_distance(lms_generated_embedding, <random 512 dimension 0-1 vector>) as d FROM test_GIS_1000000.dummy_data WHERE ST_CONTAINS(ST_POLYGON('POLYGON((-9 -9, -9 9, 9 9, 9 -9))'), ST_GeometryFromTet(data_point_point_lla)) ORDER BY d LIMIT 24;
+3. SELECT * FROM (SELECT data_point_point_lla, approx_l2_distance(lms_generated_embedding, <random 512 dimension 0-1 vector>) as d FROM test_GIS_1000000.dummy_data ORDER BY d LIMIT 10000) as t1 WHERE ST_CONTAINS(ST_POLYGON('POLYGON((-9 -9, -9 9, 9 9, 9 -9))'), ST_GeometryFromTet(t1.data_point_point_lla));
+4. SELECT data_point_point_lla, approx_l2_distance(lms_generated_embedding, <random 512 dimension 0-1 vector>) as d FROM test_GIS_1000000.dummy_data WHERE ST_CONTAINS(ST_POLYGON('POLYGON((-9 -9, -9 9, 9 9, 9 -9))'), ST_GeometryFromTet(data_point_point_lla));
+SELECT data_point_point_lla, approx_l2_distance(lms_generated_embedding, <random 512 dimension 0-1 vector>) as d FROM test_GIS_1000000.dummy_data ORDER BY d LIMIT 10000
